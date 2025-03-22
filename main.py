@@ -2,7 +2,8 @@ from langchain.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 # Set up Gemini model
-llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key="GEMINI_API_KEY")
+import os
+llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=os.environ["GEMINI_API_KEY"])
 
 # Define a prompt template
 template = PromptTemplate(
