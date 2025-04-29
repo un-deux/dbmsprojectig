@@ -2,6 +2,7 @@ import streamlit as st
 import psycopg2
 import os
 import re
+import pandas as pd
 from langchain.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
@@ -17,47 +18,55 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=API_KEY)
 
-
-st.title("Chat with your Database")
-st.write("Enter a question about the Database!")
-
-
-user_input = st.text_input("Enter your question:", "")
-
+st.title("Chat with Your Database 🤖")
+st.write("📊 Enter a question about the Database!")
+user_input = st.text_area(" Enter your question:",
+                          placeholder="Enter your query here")
 
 schema_details = """
-Table: employee
-- emp_id (INT): Primary key, unique employee ID
-- emp_name (VARCHAR): Full name of the employee (not split into first and last)
-- hire_date (DATE)
-- salary (DECIMAL)
-- dept_id (INT): FK to dept
-- job_id (INT): FK to job_title
+CREATE TABLE dept (
+    dept_id INT PRIMARY KEY,           -- Department ID (Primary Key)
+    dept_name VARCHAR(100) NOT NULL    -- Department Name
+);
 
-Table: dept
-- dept_id (INT): Primary key
-- dept_name (VARCHAR): Department name
+CREATE TABLE job_title (
+    job_id INT PRIMARY KEY,            -- Job ID (Primary Key)
+    job_title_name VARCHAR(100) NOT NULL  -- Job Title (e.g., Software Engineer)
+);
 
-Table: job_title
-- job_id (INT): Primary key
-- job_title_name (VARCHAR): Job title
+CREATE TABLE employee (
+    emp_id INT PRIMARY KEY,               -- Employee ID (Primary Key)
+    emp_name VARCHAR(100) NOT NULL,       -- Employee Name
+    hire_date DATE,                       -- Date the employee was hired
+    salary DECIMAL(10, 2),                -- Employee's salary
+    dept_id INT,                          -- Department ID (Foreign Key)
+    job_id INT,                           -- Job Title ID (Foreign Key)
+    FOREIGN KEY (dept_id) REFERENCES dept(dept_id),  -- Link to dept table
+    FOREIGN KEY (job_id) REFERENCES job_title(job_id) -- Link to job_title table
+);
 
-Table: employee_address
-- address_id (INT): Primary key
-- emp_id (INT): FK to employee
-- street_address, city, state, zip_code (VARCHAR)
+CREATE TABLE employee_address (
+    address_id INT PRIMARY KEY,         -- Address record ID (Primary Key)
+    emp_id INT,                         -- Employee ID (Foreign Key)
+    street_address VARCHAR(255),        -- Street address
+    city VARCHAR(100),                  -- City
+    state VARCHAR(100),                 -- State
+    zip_code VARCHAR(20),               -- Zip code
+    FOREIGN KEY (emp_id) REFERENCES employee(emp_id) -- Link to the employee
+);
 
-Table: employee_contact
-- contact_id (INT): Primary key
-- emp_id (INT): FK to employee
-- phone_number (VARCHAR)
-- email (VARCHAR)
+CREATE TABLE employee_contact (
+    contact_id INT PRIMARY KEY,         -- Contact record ID (Primary Key)
+    emp_id INT,                         -- Employee ID (Foreign Key)
+    phone_number VARCHAR(20),           -- Employee's phone number
+    email VARCHAR(100),                 -- Employee's email address
+    FOREIGN KEY (emp_id) REFERENCES employee(emp_id) -- Link to the employee
+);
 """
 
-template = PromptTemplate(
-    input_variables=["schema_details", "user_input"],
-    template="""
-    You are an expert PostgreSQL query generator. Convert the following natural language request into a fully functional PostgreSQL query.
+template = PromptTemplate(input_variables=["schema_details", "user_input"],
+                          template="""
+    You are an expert SQL query generator. Convert the following natural language request into a fully functional PostgreSQL query.
 
     Schema details: {schema_details}
 
@@ -65,13 +74,12 @@ template = PromptTemplate(
     "{user_input}"
 
     ### Output:
-    Generate only the PostgreSQL query without any explanation or other text.
-    """
-)
+    Generate only the SQL query without any explanation or other text.
+    """)
+
 
 def clean_query(response):
     """Sanitizes the SQL query to ensure it's a safe SELECT statement."""
-
     response = response.replace("```sql", "").replace("```", "").strip()
 
     if not re.match(r"^\s*SELECT\s", response, re.IGNORECASE):
@@ -82,37 +90,41 @@ def clean_query(response):
         r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|EXEC|CREATE|GRANT|REVOKE)\b",
         r";\s*(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|EXEC|CREATE|GRANT|REVOKE)"
     ]
-    if any(re.search(pattern, response, re.IGNORECASE) for pattern in forbidden_patterns):
+    if any(
+            re.search(pattern, response, re.IGNORECASE)
+            for pattern in forbidden_patterns):
         st.error("Unsafe SQL query detected!")
         return None
 
     return response
 
-if st.button("Retrieve from Database"):
+
+if st.button("Retrieve from Database 🔍"):
     if user_input:
-        formatted_prompt = template.format(schema_details=schema_details, user_input=user_input)
+        formatted_prompt = template.format(schema_details=schema_details,
+                                           user_input=user_input)
         response = llm.invoke(formatted_prompt)
-        query = response.content if hasattr(response, "content") else str(response)
+        query = response.content if hasattr(response,
+                                            "content") else str(response)
+
         cleaned_query = clean_query(query)
 
         if cleaned_query:
-
-
             try:
-                conn = psycopg2.connect(
-                    user=USER,
-                    password=PASSWORD,
-                    host=HOST,
-                    port=PORT,
-                    dbname=DBNAME
-                )
+                conn = psycopg2.connect(user=USER,
+                                        password=PASSWORD,
+                                        host=HOST,
+                                        port=PORT,
+                                        dbname=DBNAME)
                 cursor = conn.cursor()
                 cursor.execute(cleaned_query)
+                columns = [desc[0] for desc in cursor.description]
                 result = cursor.fetchall()
                 conn.close()
 
+                df = pd.DataFrame(result, columns=columns)
                 st.write("Query Results:")
-                st.dataframe(result)
+                st.dataframe(df)
                 st.code(cleaned_query, language="sql")
             except Exception as e:
                 st.error(f"Database error: {e}")
