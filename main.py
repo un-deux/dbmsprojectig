@@ -26,15 +26,32 @@ user_input = st.text_input("Enter your question:", "")
 
 
 schema_details = """
-CREATE TABLE employee (
-    employeeid SERIAL PRIMARY KEY,
-    firstname TEXT NOT NULL,
-    lastname TEXT NOT NULL,
-    title TEXT,
-    hiredate DATE,
-    email TEXT NOT NULL,
-    salary NUMERIC NOT NULL
-);
+Table: employee
+- emp_id (INT): Primary key, unique employee ID
+- emp_name (VARCHAR): Full name of the employee (not split into first and last)
+- hire_date (DATE)
+- salary (DECIMAL)
+- dept_id (INT): FK to dept
+- job_id (INT): FK to job_title
+
+Table: dept
+- dept_id (INT): Primary key
+- dept_name (VARCHAR): Department name
+
+Table: job_title
+- job_id (INT): Primary key
+- job_title_name (VARCHAR): Job title
+
+Table: employee_address
+- address_id (INT): Primary key
+- emp_id (INT): FK to employee
+- street_address, city, state, zip_code (VARCHAR)
+
+Table: employee_contact
+- contact_id (INT): Primary key
+- emp_id (INT): FK to employee
+- phone_number (VARCHAR)
+- email (VARCHAR)
 """
 
 template = PromptTemplate(
